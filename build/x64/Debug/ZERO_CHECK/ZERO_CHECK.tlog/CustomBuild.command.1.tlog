@@ -1,0 +1,10 @@
+^G:\LOADERATTACKER\BUILD\CMAKEFILES\C730D7831961D2088AAD746E48A3DEE9\GENERATE.STAMP.RULE
+setlocal
+F:\vs\ide\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe -SG:/LoaderAttacker -BG:/LoaderAttacker/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file G:/LoaderAttacker/build/Terminal_Test.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
