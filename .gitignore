@@ -1,0 +1,6 @@
+.clang-format
+.vscode/
+build/*
+bin/*
+res/*
+lib/*
