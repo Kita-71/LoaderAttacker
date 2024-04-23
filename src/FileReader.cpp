@@ -23,9 +23,26 @@ bool FileReader::IsFileExist(std::wstring path) {
   return (fileAttr != INVALID_FILE_ATTRIBUTES &&
           !(fileAttr & FILE_ATTRIBUTE_DIRECTORY));
 }
+std::string FileReader::GetNameByPath(std::string path) {
+  // 查找最后一个反斜杠的位置
+  std::size_t last_slash_idx = path.find_last_of("\\/");
+  if (std::string::npos != last_slash_idx) {
+    // 提取文件名
+    return path.substr(last_slash_idx + 1);
+  }
+  return path;  // 如果没有找到反斜杠，整个路径就是文件名
+}
+std::string FileReader::GetFPathByPath(std::string path) {
+  // 查找最后一个反斜杠的位置
+  std::size_t last_slash_idx = path.find_last_of("\\/");
+  if (std::string::npos != last_slash_idx) {
+    // 提取文件名
+    return path.substr(0, last_slash_idx - 1);
+  }
+  return "";  // 如果没有找到反斜杠，整个路径就是文件名
+}
 std::wstring FileReader::GetDllPath(std::wstring name) {
   std::vector<std::wstring> searchPaths;
-
   // 获取系统目录
   WCHAR systemDir[MAX_PATH];
   GetSystemDirectoryW(systemDir, MAX_PATH);
@@ -69,5 +86,5 @@ std::wstring FileReader::GetDllPath(std::wstring name) {
   }
 
   std::wcout << L"CAN NOT FIND DLL: " << name << std::endl;
-  return false;
+  return L"WRONG";
 }

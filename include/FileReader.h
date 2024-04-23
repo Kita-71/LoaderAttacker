@@ -18,5 +18,7 @@ class FileReader {
   inline HANDLE GetHandle() { return fileHandle; }
   static bool IsFileExist(std::wstring path);
   static std::wstring FileReader::GetDllPath(std::wstring name);
+  static std::string GetNameByPath(std::string path);
+  static std::string GetFPathByPath(std::string path);
 };
 #endif

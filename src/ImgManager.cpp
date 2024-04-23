@@ -1,6 +1,8 @@
 #include "ImgManager.h"
 
+#include <algorithm>
 #include <iostream>
+#include <string>
 
 #include "FileReader.h"
 #include "StringCov.h"
@@ -25,6 +27,14 @@ bool ImgManager::CreateImgArea(std::string path, bool isPE) {
   fileReader.ReadFileByOffset(imgBuffer, headersSize, 0, "AllHeaders");
   // 创建imgItem
   ImgItem* newItem = new ImgItem((DWORD)imgBuffer, true);
+  newItem->SetName(FileReader::GetNameByPath(path));
+  if (FileReader::GetFPathByPath(path) == "") {
+    WCHAR currentDir[MAX_PATH];
+    GetCurrentDirectoryW(MAX_PATH, currentDir);
+    std::wstring ws = currentDir;
+    newItem->SetPath(StringCov::toByteString(ws));
+  } else
+    newItem->SetPath(FileReader::GetFPathByPath(path));
   // 加载 Section
   DWORD secNum = newItem->GetSectionNum();
   IMAGE_SECTION_HEADER* pSecTable = newItem->GetSectionHeader();
@@ -45,21 +55,26 @@ bool ImgManager::CreateImgArea(std::string path, bool isPE) {
   // 放入Manager
   if (isPE) {
     peItem = newItem;
-    // std::cout << "## CREATE PE IMG,BASE:" << (DWORD)imgBuffer << std::endl;
+  } else {
+    std::string name = FileReader::GetNameByPath(path);
+    imgArray[name] = newItem;
   }
-  // else
-  //  imgArray.push_back(newItem);
   return true;
 }
 
 bool ImgManager::Relocate(ImgItem* item) {
   // 获取重定位表的Virtual Address
+  std::cout << "## RELOCATE START" << std::endl;
   DWORD relAddress = item->GetRelVirtualAddress();
-  if (relAddress == 0) return false;
+  if (relAddress == 0) {
+    std::cout << "## RELOCATE NOT EXIST,FINISH" << std::endl;
+    return false;
+  }
   PIMAGE_BASE_RELOCATION relTableBase =
       (PIMAGE_BASE_RELOCATION)(item->GetImgBase() + relAddress);
   PIMAGE_BASE_RELOCATION curRelBlock = relTableBase;
-  while (curRelBlock->SizeOfBlock != 0 && curRelBlock->VirtualAddress != 0) {
+  // BUG点1，先判VA，再判SB
+  while (curRelBlock->VirtualAddress != 0 && curRelBlock->SizeOfBlock != 0) {
     WORD* relBlockData =
         (WORD*)((DWORD)curRelBlock + sizeof(IMAGE_BASE_RELOCATION));
     int dataCount = (curRelBlock->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) /
@@ -78,13 +93,18 @@ bool ImgManager::Relocate(ImgItem* item) {
     curRelBlock =
         (PIMAGE_BASE_RELOCATION)((DWORD)curRelBlock + curRelBlock->SizeOfBlock);
   }
-  std::cout << "## RELOCATE" << std::endl;
+  std::cout << "## RELOCATE FINISH" << std::endl;
   return true;
 };
 
 bool ImgManager::FixImportTable(ImgItem* item) {
+  std::cout << "## FIX IMPORT TABLE START" << std::endl;
   // 找到导入表
   DWORD importTableOffset = item->GetImpVirtualAddress();
+  if (importTableOffset == 0) {
+    std::cout << "## IMPORT TABLE NOT EXIST,FINISH" << std::endl;
+    return false;
+  }
   PIMAGE_IMPORT_DESCRIPTOR importTableBase =
       (PIMAGE_IMPORT_DESCRIPTOR)((DWORD)item->GetImgBase() + importTableOffset);
   PIMAGE_IMPORT_DESCRIPTOR curImpTableItem = importTableBase;
@@ -96,28 +116,14 @@ bool ImgManager::FixImportTable(ImgItem* item) {
         (DWORD)item->GetImgBase() + curImpTableItem->OriginalFirstThunk;
     DWORD IATAddress = (DWORD)item->GetImgBase() + curImpTableItem->FirstThunk;
     DWORD nameAddress = (DWORD)item->GetImgBase() + curImpTableItem->Name;
+    DWORD dllBase;
     char* name = (char*)(nameAddress);
-
-    // TODO：查看动态库是否在内存，不在则加载动态库
-    /*查找自己的dll管理器
-    std::string Sname = name;
-    ImgItem* item = GetItemByName(name);
-    if (item == NULL) {
-      // 加载
-      ;
-    }*/
-    // 先完成假设已经在内存里的内容
-
-    // 获取dll的base
-    HMODULE dllHandle = GetModuleHandleA(name);
-    if (NULL == dllHandle) {
-      dllHandle = LoadLibraryA(name);
-      if (NULL == dllHandle) {
-        curImpTableItem++;
-        continue;
-      }
+    if (strcmp(name, "KERNEL32.dll") == 0) memcpy(name + 9, "DLL", 3);
+    dllBase = GetDllBase(name);
+    if (NULL == dllBase) {
+      curImpTableItem++;
+      continue;
     }
-
     // INT表的item
     PIMAGE_THUNK_DATA INTItem = (PIMAGE_THUNK_DATA)INTAddress;
     PIMAGE_THUNK_DATA IATItem = (PIMAGE_THUNK_DATA)IATAddress;
@@ -127,23 +133,41 @@ bool ImgManager::FixImportTable(ImgItem* item) {
           (DWORD)item->GetImgBase() + INTItem[i].u1.AddressOfData;
       PIMAGE_IMPORT_BY_NAME importByName =
           (PIMAGE_IMPORT_BY_NAME)importByNameAddress;
-      FARPROC funcAddress;
+      DWORD funcAddress;
       if (INTItem[i].u1.AddressOfData & 0x80000000) {
         // 序号导出
         // TODO：获取导出函数在内存中的地址（查找dll基址和导出函数表）
-        funcAddress = GetProcAddress(
-            dllHandle, (LPCSTR)(INTItem[i].u1.Ordinal & 0x0000FFFF));
+        funcAddress = GetFuncAddr(imgArray[name], 0,
+                                  (LPCSTR)(INTItem[i].u1.Ordinal & 0x0000FFFF));
       } else {
         // 名称导出
         // TODO：获取导出函数在内存中的地址（查找dll基址和导出函数表）
-        funcAddress = GetProcAddress(dllHandle, (LPCSTR)importByName->Name);
+        funcAddress =
+            GetFuncAddr(imgArray[name], 1, (LPCSTR)importByName->Name);
+        if (funcAddress >= imgArray[name]->GetImgBase() +
+                               imgArray[name]->GetExpVirtualAddress() &&
+            funcAddress <= imgArray[name]->GetImgBase() +
+                               imgArray[name]->GetExpVirtualAddress() +
+                               imgArray[name]->GetExpSize()) {
+          std::string relString = (char*)funcAddress;
+          int i = relString.find('.');
+          std::string relName = relString.substr(0, i) + ".dll";
+          transform(relName.begin(), relName.end(), relName.begin(), ::tolower);
+          std::string relFuncName =
+              relString.substr(i + 1, relString.size() - i - 1);
+
+          DWORD relDllBse = GetDllBase(relName.c_str());
+          funcAddress =
+              GetFuncAddr(imgArray[relName], 1, (LPCSTR)relFuncName.c_str());
+        }
+        CHECK_CONDITION(funcAddress == 0, "FUNC GET FAILED");
       }
       IATItem[i].u1.Function = (DWORD)funcAddress;
       i++;
     }
     curImpTableItem++;
   }
-  std::cout << "## FIXING IMPORT TABLE" << std::endl;
+  std::cout << "## FIX IMPORT TABLE FINISH" << std::endl;
   return true;
 };
 
@@ -169,6 +193,71 @@ bool ImgManager::CallEntry() {
 ImgItem* ImgManager::GetItemByName(std::string name) { return imgArray[name]; }
 DWORD ImgManager::DllLoader(std::string name) {
   // 找dll在哪儿
-  // std::wstring path = FileReader::GetDllPath(StringCov::toWideString(name));
+  std::wstring path = FileReader::GetDllPath(StringCov::toWideString(name));
+  if (path.compare(L"WRONG") == 0) {
+    return 0;
+  } else {
+    // 找到则加载
+    CreateImgArea(StringCov::toByteString(path), false);
+    Relocate(imgArray[name]);
+    FixImportTable(imgArray[name]);
+    return imgArray[name]->GetImgBase();
+  }
   return 0;
+}
+DWORD ImgManager::GetFuncAddr(ImgItem* dllItem, int impWay,
+                              const char* nameOrId) {
+  if (!dllItem || !nameOrId) {
+    return NULL;
+  }
+  // 获取基址
+  DWORD base = dllItem->GetImgBase();
+  // 获取导出表
+  PIMAGE_EXPORT_DIRECTORY exportDirectory =
+      (PIMAGE_EXPORT_DIRECTORY)((BYTE*)base + dllItem->GetExpVirtualAddress());
+
+  // 获取名称指针数组、序号数组和地址数组
+  DWORD* nameTablePtrs =
+      (DWORD*)((BYTE*)base + exportDirectory->AddressOfNames);
+  WORD* ordinalTablePtrs =
+      (WORD*)((BYTE*)base + exportDirectory->AddressOfNameOrdinals);
+  DWORD* addrTablePtrs =
+      (DWORD*)((BYTE*)base + exportDirectory->AddressOfFunctions);
+  DWORD Base = exportDirectory->Base;
+  if (impWay == 0) {
+    // 序号导出
+    WORD ordinal = LOWORD(nameOrId);
+    if (ordinal < exportDirectory->NumberOfFunctions) {
+      // 根据序号找到函数地址
+      return (DWORD)((BYTE*)base + addrTablePtrs[ordinal - Base]);
+    }
+  } else {
+    // 遍历名称表，查找函数名
+    for (DWORD i = 0; i < exportDirectory->NumberOfNames; ++i) {
+      const char* functionName = (const char*)((BYTE*)base + nameTablePtrs[i]);
+      char* stubFuncName = (char*)malloc(strlen(nameOrId) + 5);
+      memcpy(stubFuncName, nameOrId, strlen(nameOrId));
+      memcpy(stubFuncName + strlen(nameOrId), "Stub", 5);
+      if (strcmp(functionName, nameOrId) == 0) {
+        WORD funcIndex = ordinalTablePtrs[i];
+        if (funcIndex < exportDirectory->NumberOfFunctions) {
+          // 根据序号找到函数地址
+          return (DWORD)((BYTE*)base + addrTablePtrs[funcIndex]);
+        }
+      }
+    }
+  }
+
+  return NULL;  // 未找到
+}
+
+DWORD ImgManager::GetDllBase(const char* name) {
+  DWORD dllBase = (DWORD)GetModuleHandle(name);
+  if (NULL == dllBase) {
+    WCHAR currentDir[MAX_PATH];
+    GetCurrentDirectoryW(MAX_PATH, currentDir);
+    std::wstring oldWorkPath = currentDir;
+    dllBase = DllLoader(name);
+  }
+  return dllBase;
 }

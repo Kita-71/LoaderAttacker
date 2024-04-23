@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
   if ((!arg1.compare("-l")) || (!arg1.compare("-load"))) {
     std::cout << "LOAD START" << std::endl;
     ImgManager imgManager;
-    imgManager.CreateImgArea("simpleProgram.exe", true);
+    imgManager.CreateImgArea(arg2.c_str(), true);
     imgManager.Relocate(imgManager.GetPeItem());
     imgManager.FixImportTable(imgManager.GetPeItem());
     imgManager.CallEntry();

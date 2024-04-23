@@ -1,6 +1,7 @@
 #ifndef _IMG_MANAGER_H_
 #define _IMG_MANAGER_H_
 #include <Windows.h>
+#include <tlhelp32.h>
 
 #include <unordered_map>
 #include <vector>
@@ -37,8 +38,15 @@ class ImgItem {
   DWORD imgSize;
   bool createByMe;
   ImgHeaders imgHeaders;
+  std::string name;
+  std::string path;
 
  public:
+  std::string GetName() const { return name; }
+  void SetName(std::string name) { this->name = name; }
+  std::string GetPath() const { return path; }
+  void SetPath(std::string path) { this->path = path; }
+
   ImgItem(DWORD imgBase, bool createByMe) {
     CHECK_CONDITION((imgBase == NULL), "imgBase not exist");
     this->imgBase = imgBase;
@@ -58,6 +66,8 @@ class ImgItem {
   virtual ~ImgItem(){};
   // 测试用，获取头部
   ImgHeaders* GetImgHeaders() { return &imgHeaders; };
+  // name和path
+
   // img、header相关
   inline DWORD GetImageSize() {
     return imgHeaders.GetNtHeader()->OptionalHeader.SizeOfImage;
@@ -96,6 +106,17 @@ class ImgItem {
   inline void SetImgBase() {
     imgHeaders.GetNtHeader()->OptionalHeader.ImageBase = imgBase;
   }
+  // 导出表相关
+  inline DWORD GetExpVirtualAddress() {
+    return imgHeaders.GetNtHeader()
+        ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]
+        .VirtualAddress;
+  }
+  inline DWORD GetExpSize() {
+    return imgHeaders.GetNtHeader()
+        ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]
+        .Size;
+  }
   // 启动相关
   inline DWORD GetEntryAddress() {
     return imgHeaders.GetNtHeader()->OptionalHeader.AddressOfEntryPoint;
@@ -112,6 +133,34 @@ class ImgManager {
   ImgManager() {
     peItem = NULL;
     // 将已加载的模块初始化到itemArray中
+    HANDLE hModuleSnap = INVALID_HANDLE_VALUE;
+    MODULEENTRY32 me32;
+
+    // 创建模块快照。
+    hModuleSnap =
+        CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
+    if (hModuleSnap == INVALID_HANDLE_VALUE) {
+      std::cerr << "CreateToolhelp32Snapshot failed." << std::endl;
+      return;
+    }
+
+    // 初始化MODULEENTRY32结构。
+    me32.dwSize = sizeof(MODULEENTRY32);
+
+    // 遍历模块列表。
+    if (Module32First(hModuleSnap, &me32)) {
+      do {
+        // std::wcout << L"Module name: " << me32.szModule << std::endl;
+        ImgItem* newItem = new ImgItem((DWORD)me32.hModule, true);
+        this->imgArray[me32.szModule] = newItem;
+        // std::wcout << L"Executable path: " << me32.szExePath << std::endl;
+      } while (Module32Next(hModuleSnap, &me32));
+    } else {
+      // std::cerr << "Failed to gather module information." << std::endl;
+    }
+
+    // 不要忘记清理快照对象。
+    CloseHandle(hModuleSnap);
   };
   virtual ~ImgManager(){};
   bool AddExistedDll();
@@ -121,5 +170,7 @@ class ImgManager {
   ImgItem* GetItemByName(std::string name);
   DWORD DllLoader(std::string name);
   bool CallEntry();
+  DWORD GetFuncAddr(ImgItem* dllItem, int impWay, const char* nameOrId);
+  DWORD GetDllBase(const char* name);
 };
 #endif
