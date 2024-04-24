@@ -1,7 +1,9 @@
 #include <iostream>
 
-#include "FileReader.h"
 #include "ImgManager.h"
+#include "ImpTableFixer.h"
+#include "Loader.h"
+#include "Relocator.h"
 #include "Terminal.h"
 int main(int argc, char* argv[]) {
   if (argc < 2) {
@@ -19,10 +21,10 @@ int main(int argc, char* argv[]) {
   if ((!arg1.compare("-l")) || (!arg1.compare("-load"))) {
     std::cout << "LOAD START" << std::endl;
     ImgManager imgManager;
-    imgManager.CreateImgArea(arg2.c_str(), true);
-    imgManager.Relocate(imgManager.GetPeItem());
-    imgManager.FixImportTable(imgManager.GetPeItem());
-    imgManager.CallEntry();
+    Relocator relocator;
+    ImpTableFixer impTableFixer;
+    Loader loader(&imgManager, &relocator, &impTableFixer);
+    loader.Load(arg2);
   }
   return 0;
 }

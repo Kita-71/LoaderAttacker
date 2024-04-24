@@ -1,6 +1,8 @@
 #include <iostream>
 
 #include "ImgManager.h"
+#include "ImpTableFixer.h"
+#include "Relocator.h"
 #include "gtest/gtest.h"
 TEST(IMG_MANAGER_TEST, CREATE_HEADERS) {
   ImgManager imgManager;
@@ -61,6 +63,7 @@ TEST(IMG_MANAGER_TEST, CREATE_SECTION) {
   EXPECT_EQ(*((BYTE*)(buffer + 0xB005)), 0x19);
 }
 TEST(IMG_MANAGER_TEST, RELOCATE) {
+  Relocator relocator;
   ImgManager imgManager;
   imgManager.CreateImgArea("simpleProgram.exe", true);
   ImgItem* item = imgManager.GetPeItem();
@@ -73,7 +76,7 @@ TEST(IMG_MANAGER_TEST, RELOCATE) {
   EXPECT_EQ(*((DWORD*)(buffer + 0x00001000 + 0x0517)), 0x00401028);
   EXPECT_EQ(*((DWORD*)(buffer + 0x00001000 + 0x051C)), 0x00408C44);
   EXPECT_EQ(*((DWORD*)(buffer + 0x00001000 + 0x0521)), 0x0040C0D4);
-  imgManager.Relocate(item);
+  relocator.Relocate(item);
   EXPECT_EQ(*((DWORD*)(buffer + 0x00001000 + 0x0517)),
             0x00401028 + (DWORD)(buffer - 0x00400000));
   EXPECT_EQ(*((DWORD*)(buffer + 0x00001000 + 0x051C)),
@@ -83,6 +86,7 @@ TEST(IMG_MANAGER_TEST, RELOCATE) {
 }
 TEST(IMG_MANAGER_TEST, IMP_TABLE) {
   ImgManager imgManager;
+  ImpTableFixer impTableFixer;
   imgManager.CreateImgArea("simpleProgram.exe", true);
   ImgItem* item = imgManager.GetPeItem();
   char* buffer = (char*)item->GetImgBase();
@@ -109,7 +113,7 @@ TEST(IMG_MANAGER_TEST, IMP_TABLE) {
   EXPECT_EQ(strcmp((char*)(buffer + 0xCE04), "GetProcessHeap"), 0);
 
   // 查看
-  imgManager.FixImportTable(item);
+  impTableFixer.FixImportTable(&imgManager, item);
   // std::cout << (DWORD)GetModuleHandle("MSVCP140D.dll") << std::endl;
   // std::cout << *((DWORD*)(buffer + 0xC338)) << std::endl;
 }
