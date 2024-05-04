@@ -7,14 +7,14 @@
 TEST(IMG_MANAGER_TEST, CREATE_HEADERS) {
   ImgManager imgManager;
   imgManager.CreateImgArea("simpleProgram.exe", true);
-  ImgItem* item = imgManager.GetPeItem();
+  ImgItem* item = imgManager.GetExeItem();
   // GetImgHeaders
   ImgHeaders* imgHeaders = item->GetImgHeaders();
   // DOS头测试
   PIMAGE_DOS_HEADER dosHeader = imgHeaders->GetDosHeader();
   EXPECT_EQ(dosHeader->e_magic, 0x5A4D);  //"MZ"
   // NT头测试
-  IMAGE_NT_HEADERS* ntHeader = imgHeaders->GetNtHeader();
+  IMAGE_NT_HEADERS* ntHeader = imgHeaders->GetNtHeader32();
   EXPECT_EQ(ntHeader->Signature, 0x4550);  //"PE"
   // 各种Get测试
   DWORD imgSize = item->GetImageSize();
@@ -25,12 +25,12 @@ TEST(IMG_MANAGER_TEST, CREATE_HEADERS) {
 TEST(IMG_MANAGER_TEST, CREATE_SECTION_HEADER) {
   ImgManager imgManager;
   imgManager.CreateImgArea("simpleProgram.exe", true);
-  ImgItem* item = imgManager.GetPeItem();
+  ImgItem* item = imgManager.GetExeItem();
   // SECTION_TABLE
   DWORD num = item->GetSectionNum();
-  EXPECT_EQ(num, 8);
+  EXPECT_EQ(num, 7);
   DWORD secTableSize = item->GetSectionTableSize();
-  EXPECT_EQ(secTableSize, 0x140);
+  EXPECT_EQ(secTableSize, 0x118);
 
   // 遍历Section Table
   IMAGE_SECTION_HEADER* secHeader = item->GetSectionHeader();
@@ -45,7 +45,7 @@ TEST(IMG_MANAGER_TEST, CREATE_SECTION_HEADER) {
 TEST(IMG_MANAGER_TEST, CREATE_SECTION) {
   ImgManager imgManager;
   imgManager.CreateImgArea("simpleProgram.exe", true);
-  ImgItem* item = imgManager.GetPeItem();
+  ImgItem* item = imgManager.GetExeItem();
   char* buffer = (char*)item->GetImgBase();
   // text段
   EXPECT_EQ(*((BYTE*)(buffer + 0x1000)), 0xCC);
@@ -66,7 +66,7 @@ TEST(IMG_MANAGER_TEST, RELOCATE) {
   Relocator relocator;
   ImgManager imgManager;
   imgManager.CreateImgArea("simpleProgram.exe", true);
-  ImgItem* item = imgManager.GetPeItem();
+  ImgItem* item = imgManager.GetExeItem();
   char* buffer = (char*)item->GetImgBase();
   EXPECT_EQ(item->GetRelVirtualAddress(), 0x10000);
   EXPECT_EQ(item->GetFileExpectedBase(), 0x400000);
@@ -87,8 +87,9 @@ TEST(IMG_MANAGER_TEST, RELOCATE) {
 TEST(IMG_MANAGER_TEST, IMP_TABLE) {
   ImgManager imgManager;
   ImpTableFixer impTableFixer;
+  ApiMsReader apiMsReader;
   imgManager.CreateImgArea("simpleProgram.exe", true);
-  ImgItem* item = imgManager.GetPeItem();
+  ImgItem* item = imgManager.GetExeItem();
   char* buffer = (char*)item->GetImgBase();
   EXPECT_EQ(item->GetImpVirtualAddress(), 0xC240);
   // 四个导入表
@@ -113,7 +114,7 @@ TEST(IMG_MANAGER_TEST, IMP_TABLE) {
   EXPECT_EQ(strcmp((char*)(buffer + 0xCE04), "GetProcessHeap"), 0);
 
   // 查看
-  impTableFixer.FixImportTable(&imgManager, item);
+  impTableFixer.FixImportTable(&imgManager, &apiMsReader, item);
   // std::cout << (DWORD)GetModuleHandle("MSVCP140D.dll") << std::endl;
   // std::cout << *((DWORD*)(buffer + 0xC338)) << std::endl;
 }

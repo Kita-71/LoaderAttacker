@@ -12,11 +12,9 @@ FileReader::FileReader(std::string filePath) {
 bool FileReader::ReadFileByOffset(LPVOID buffer, DWORD size, DWORD offset,
                                   std::string errorName) {
   SetFilePointer(fileHandle, offset, NULL, FILE_BEGIN);
-  {
-    bool ret = TRUE;
-    ret = ReadFile(fileHandle, buffer, size, NULL, NULL);
-    CHECK_CONDITION((ret == FALSE), (errorName + "Read Failed").c_str());
-  }
+  bool ret = TRUE;
+  ret = ReadFile(fileHandle, buffer, size, NULL, NULL);
+  CHECK_CONDITION((ret == FALSE), (errorName + "Read Failed").c_str());
 }
 bool FileReader::IsFileExist(std::wstring path) {
   DWORD fileAttr = GetFileAttributesW(path.c_str());
@@ -80,7 +78,7 @@ std::wstring FileReader::GetDllPath(std::wstring name) {
   for (const auto& path : searchPaths) {
     std::wstring fullPath = path + L"\\" + name;
     if (IsFileExist(fullPath)) {
-      std::wcout << L"FIND DLL: " << fullPath << std::endl;
+      // std::wcout << L"FIND DLL: " << fullPath << std::endl;
       return fullPath;
     }
   }

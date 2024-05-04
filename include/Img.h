@@ -8,11 +8,11 @@
 #include "errorMsg.h"
 class ImgHeaders {
  private:
-  PIMAGE_DOS_HEADER dosHeader;
-  PIMAGE_NT_HEADERS ntHeader;
-  PIMAGE_SECTION_HEADER secHeaders;
-  DWORD secNum;
-
+  PIMAGE_DOS_HEADER dosHeader;       // dos头部
+  PIMAGE_NT_HEADERS32 ntHeader32;    // 32位nt头部
+  PIMAGE_NT_HEADERS64 ntHeader64;    // 64位nt头部
+  PIMAGE_SECTION_HEADER secHeaders;  // 节表位置
+  DWORD secNum;                      // 节数
  public:
   // getter&setter
   PIMAGE_DOS_HEADER GetDosHeader() const { return dosHeader; }
@@ -20,8 +20,14 @@ class ImgHeaders {
     this->dosHeader = dosHeader;
   }
 
-  PIMAGE_NT_HEADERS GetNtHeader() const { return ntHeader; }
-  void SetNtHeader(PIMAGE_NT_HEADERS ntHeader) { this->ntHeader = ntHeader; }
+  PIMAGE_NT_HEADERS32 GetNtHeader32() const { return ntHeader32; }
+  void SetNtHeader32(PIMAGE_NT_HEADERS32 ntHeader32) {
+    this->ntHeader32 = ntHeader32;
+  }
+  PIMAGE_NT_HEADERS64 GetNtHeader64() const { return ntHeader64; }
+  void SetNtHeader64(PIMAGE_NT_HEADERS64 ntHeader64) {
+    this->ntHeader64 = ntHeader64;
+  }
 
   PIMAGE_SECTION_HEADER GetSecHeaders() const { return secHeaders; }
   void SetSecHeaders(PIMAGE_SECTION_HEADER secHeaders) {
@@ -34,12 +40,13 @@ class ImgHeaders {
 
 class ImgItem {
  private:
-  DWORD imgBase;
-  DWORD imgSize;
-  bool createByMe;
-  ImgHeaders imgHeaders;
-  std::string name;
-  std::string path;
+  DWORD imgBase;          // 镜像加载基址
+  DWORD imgSize;          // 镜像大小
+  bool createByMe;        // 标志该PE是否由该加载器加载
+  ImgHeaders imgHeaders;  // PE文件头部信息
+  std::string name;       // PE文件名
+  std::string path;       // PE文件所在路径
+  bool is64;              // 标志此PE文件是32位还是64位
 
  public:
   std::string GetName() const { return name; }
@@ -55,13 +62,18 @@ class ImgItem {
     DWORD dosHeaderAddress = imgBase;
     imgHeaders.SetDosHeader((PIMAGE_DOS_HEADER)dosHeaderAddress);
     DWORD ntHeaderAddress = imgBase + imgHeaders.GetDosHeader()->e_lfanew;
-    imgHeaders.SetNtHeader((PIMAGE_NT_HEADERS)ntHeaderAddress);
-    DWORD secNum = imgHeaders.GetNtHeader()->FileHeader.NumberOfSections + 1;
+    imgHeaders.SetNtHeader32((PIMAGE_NT_HEADERS32)ntHeaderAddress);
+    imgHeaders.SetNtHeader64((PIMAGE_NT_HEADERS64)ntHeaderAddress);
+    DWORD secNum = imgHeaders.GetNtHeader32()->FileHeader.NumberOfSections;
     imgHeaders.SetSecNum(secNum);
-    DWORD imgHeadersAddress = imgBase + imgHeaders.GetDosHeader()->e_lfanew +
-                              sizeof(IMAGE_NT_HEADERS);
+    DWORD imgHeadersAddress =
+        (DWORD)IMAGE_FIRST_SECTION((PIMAGE_NT_HEADERS)ntHeaderAddress);
     imgHeaders.SetSecHeaders((PIMAGE_SECTION_HEADER)imgHeadersAddress);
-    this->imgSize = imgHeaders.GetNtHeader()->OptionalHeader.SizeOfImage;
+    this->imgSize = imgHeaders.GetNtHeader32()->OptionalHeader.SizeOfImage;
+    if (imgHeaders.GetNtHeader32()->OptionalHeader.Magic == 0x10B)
+      is64 = false;
+    else
+      is64 = true;
   }
   virtual ~ImgItem(){};
   // 测试用，获取头部
@@ -70,10 +82,12 @@ class ImgItem {
 
   // img、header相关
   inline DWORD GetImageSize() {
-    return imgHeaders.GetNtHeader()->OptionalHeader.SizeOfImage;
+    return (is64 ? (imgHeaders.GetNtHeader64()->OptionalHeader.SizeOfImage)
+                 : (imgHeaders.GetNtHeader32()->OptionalHeader.SizeOfImage));
   }
   inline DWORD GetHeadersSize() {
-    return imgHeaders.GetNtHeader()->OptionalHeader.SizeOfHeaders;
+    return (is64 ? (imgHeaders.GetNtHeader64()->OptionalHeader.SizeOfHeaders)
+                 : (imgHeaders.GetNtHeader32()->OptionalHeader.SizeOfHeaders));
   }
   // SectionTable相关
   inline DWORD GetSectionTableSize() { return (imgHeaders.GetSecNum()) * 0x28; }
@@ -88,38 +102,60 @@ class ImgItem {
 
   // 重定位相关信息
   inline DWORD GetRelVirtualAddress() {
-    return imgHeaders.GetNtHeader()
-        ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC]
-        .VirtualAddress;
+    return (is64 ? (imgHeaders.GetNtHeader64()
+                        ->OptionalHeader
+                        .DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC]
+                        .VirtualAddress)
+                 : (imgHeaders.GetNtHeader32()
+                        ->OptionalHeader
+                        .DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC]
+                        .VirtualAddress));
   }
   inline DWORD GetFileExpectedBase() {
-    return imgHeaders.GetNtHeader()->OptionalHeader.ImageBase;
+    return (is64 ? (imgHeaders.GetNtHeader64()->OptionalHeader.ImageBase)
+                 : (imgHeaders.GetNtHeader32()->OptionalHeader.ImageBase));
   }
 
   // Import Table相关
   inline DWORD GetImpVirtualAddress() {
-    return imgHeaders.GetNtHeader()
-        ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT]
-        .VirtualAddress;
+    return (
+        is64 ? (imgHeaders.GetNtHeader64()
+                    ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT]
+                    .VirtualAddress)
+             : (imgHeaders.GetNtHeader32()
+                    ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT]
+                    .VirtualAddress));
   }
   inline DWORD GetImgBase() { return this->imgBase; };
   inline void SetImgBase() {
-    imgHeaders.GetNtHeader()->OptionalHeader.ImageBase = imgBase;
+    (is64 ? (imgHeaders.GetNtHeader64()->OptionalHeader.ImageBase = imgBase)
+          : (imgHeaders.GetNtHeader32()->OptionalHeader.ImageBase = imgBase));
   }
   // 导出表相关
   inline DWORD GetExpVirtualAddress() {
-    return imgHeaders.GetNtHeader()
-        ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]
-        .VirtualAddress;
+    return (
+        is64 ? (imgHeaders.GetNtHeader64()
+                    ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]
+                    .VirtualAddress)
+             : (imgHeaders.GetNtHeader32()
+                    ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]
+                    .VirtualAddress));
   }
   inline DWORD GetExpSize() {
-    return imgHeaders.GetNtHeader()
-        ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]
-        .Size;
+    return (
+        is64 ? (imgHeaders.GetNtHeader64()
+                    ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]
+                    .Size)
+             : (imgHeaders.GetNtHeader32()
+                    ->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]
+                    .Size));
   }
   // 启动相关
   inline DWORD GetEntryAddress() {
-    return imgHeaders.GetNtHeader()->OptionalHeader.AddressOfEntryPoint;
+    return (
+        is64
+            ? (imgHeaders.GetNtHeader64()->OptionalHeader.AddressOfEntryPoint)
+            : (imgHeaders.GetNtHeader32()->OptionalHeader.AddressOfEntryPoint));
   }
 };
 #endif

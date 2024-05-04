@@ -9,14 +9,17 @@ class Loader {
   ImgManager* imgManager_;
   Relocator* relocator_;
   ImpTableFixer* impTableFixer_;
+  ApiMsReader* apiMsReader_;
 
  public:
   Loader(ImgManager* imgManager, Relocator* relocator,
-         ImpTableFixer* impTableFixer)
+         ImpTableFixer* impTableFixer, ApiMsReader* apiMsReader)
       : imgManager_(imgManager),
         relocator_(relocator),
-        impTableFixer_(impTableFixer){};
+        impTableFixer_(impTableFixer),
+        apiMsReader_(apiMsReader){};
   virtual ~Loader(){};
   void Load(std::string path);
+  void Start();
 };
 #endif

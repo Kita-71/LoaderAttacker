@@ -16,3 +16,4 @@ set(CMAKE_WIN32_EXECUTABLE ON)
 # 生成可执行文件
 add_executable(simpleWindow WIN32 ${SP_SRC_DIR})
 
+target_link_libraries(simpleWindow  PRIVATE testDll)

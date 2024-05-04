@@ -8,19 +8,20 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ApiMsReader.h"
 #include "Relocator.h"
 #include "errorMsg.h"
 
 class ImgManager {
  private:
-  ImgItem* peItem;
-  std::unordered_map<std::string, ImgItem*> imgArray;
-  std::queue<ImgItem*> imgQueue;
+  ImgItem* exeItem;
+  std::unordered_map<std::string, ImgItem*> dllArray;
+  std::queue<ImgItem*> unHandledDllQueue;
 
  public:
   // 初始化、构造析构
   ImgManager() {
-    peItem = NULL;
+    exeItem = NULL;
     GetAllLoadedDll();
   };
   void GetAllLoadedDll() {
@@ -39,13 +40,11 @@ class ImgManager {
     // 遍历模块列表。
     if (Module32First(hModuleSnap, &me32)) {
       do {
-        // std::wcout << L"Module name: " << me32.szModule << std::endl;
         ImgItem* newItem = new ImgItem((DWORD)me32.hModule, true);
-        this->imgArray[me32.szModule] = newItem;
-        // std::wcout << L"Executable path: " << me32.szExePath << std::endl;
+        this->dllArray[me32.szModule] = newItem;
       } while (Module32Next(hModuleSnap, &me32));
     } else {
-      // std::cerr << "Failed to gather module information." << std::endl;
+      std::cerr << "Failed to gather module information." << std::endl;
     }
 
     // 清理快照对象。
@@ -54,11 +53,13 @@ class ImgManager {
   virtual ~ImgManager(){};
 
   // Get&Set
-  inline ImgItem* GetPeItem() { return peItem; }
-  inline std::unordered_map<std::string, ImgItem*>& GetImgArray() {
-    return imgArray;
+  inline ImgItem* GetExeItem() { return exeItem; }
+  inline std::unordered_map<std::string, ImgItem*>& GetDllArray() {
+    return dllArray;
   };
-  inline std::queue<ImgItem*>& GetImgQueue() { return imgQueue; }
+  inline std::queue<ImgItem*>& GetUnHandledDllQueue() {
+    return unHandledDllQueue;
+  }
 
   bool CreateImgArea(std::string path, bool isPE);
   DWORD DllLoader(std::string name);

@@ -1,10 +1,51 @@
 #include <iostream>
 
+#include "Attacker.h"
 #include "ImgManager.h"
 #include "ImpTableFixer.h"
 #include "Loader.h"
 #include "Relocator.h"
 #include "Terminal.h"
+
+LRESULT CALLBACK WindowProcedure(HWND, UINT, WPARAM, LPARAM);
+
+int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR args,
+                   int ncmdshow) {
+  WNDCLASSW wc = {0};
+
+  wc.hbrBackground = (HBRUSH)COLOR_BACKGROUND;
+  wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+  wc.hInstance = hInst;
+  wc.lpszClassName = L"MyWindowClass";
+  wc.lpfnWndProc = WindowProcedure;
+
+  if (!RegisterClassW(&wc)) return -1;
+
+  CreateWindowW(L"MyWindowClass", L"My Window",
+                WS_OVERLAPPEDWINDOW | WS_VISIBLE, 100, 100, 500, 500, NULL,
+                NULL, NULL, NULL);
+
+  MSG msg = {0};
+
+  while (GetMessage(&msg, NULL, 0, 0)) {
+    TranslateMessage(&msg);
+    DispatchMessage(&msg);
+  }
+
+  return 0;
+}
+
+LRESULT CALLBACK WindowProcedure(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
+  switch (msg) {
+    case WM_DESTROY:
+      PostQuitMessage(0);
+      break;
+    default:
+      return DefWindowProcW(hWnd, msg, wp, lp);
+  }
+  return 0;
+}
+
 int main(int argc, char* argv[]) {
   if (argc < 2) {
     std::cerr
@@ -23,8 +64,12 @@ int main(int argc, char* argv[]) {
     ImgManager imgManager;
     Relocator relocator;
     ImpTableFixer impTableFixer;
-    Loader loader(&imgManager, &relocator, &impTableFixer);
+    ApiMsReader apiMsReader;
+    Attacker& attacker = Attacker::getInstance(&imgManager);
+    Loader loader(&imgManager, &relocator, &impTableFixer, &apiMsReader);
     loader.Load(arg2);
+    attacker.Attack();
+    loader.Start();
   }
   return 0;
 }

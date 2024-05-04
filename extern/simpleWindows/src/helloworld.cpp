@@ -1,5 +1,7 @@
 #include <windows.h>
 
+#include "testdll.h"
+
 LRESULT CALLBACK WindowProcedure(HWND, UINT, WPARAM, LPARAM);
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR args,
@@ -30,9 +32,13 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR args,
 
 LRESULT CALLBACK WindowProcedure(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
   switch (msg) {
+    case WM_LBUTTONDOWN:  // 当鼠标左键被按下时
+      hello();
+      break;
     case WM_DESTROY:
       PostQuitMessage(0);
       break;
+
     default:
       return DefWindowProcW(hWnd, msg, wp, lp);
   }

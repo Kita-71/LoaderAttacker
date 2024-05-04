@@ -12,11 +12,13 @@ bool Relocator::Relocate(ImgItem* item) {
   PIMAGE_BASE_RELOCATION curRelBlock = relTableBase;
   // BUG点1，先判VA，再判SB
   while (curRelBlock->VirtualAddress != 0 && curRelBlock->SizeOfBlock != 0) {
+    unsigned long int dataCount =
+        (curRelBlock->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) /
+        sizeof(WORD);  // 计算重定位条目数量
     WORD* relBlockData =
-        (WORD*)((DWORD)curRelBlock + sizeof(IMAGE_BASE_RELOCATION));
-    int dataCount = (curRelBlock->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) /
-                    sizeof(WORD);
-    for (int i = 0; i < dataCount; i++) {
+        (WORD*)((DWORD)curRelBlock +
+                sizeof(IMAGE_BASE_RELOCATION));  // 计算第一个重定位条目的位置
+    for (unsigned long int i = 0; i < dataCount; i++) {
       if ((relBlockData[i] & 0xF000) == 0x3000)  // 标记该地址需要重定位
       {
         DWORD* pointerToData =
