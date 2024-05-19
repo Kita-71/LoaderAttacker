@@ -30,6 +30,7 @@ bool ImgManager::CreateImgArea(std::string path, bool isEXE) {
   // 放入Manager
   if (isEXE) {
     exeItem = newItem;
+    exeItem->SetName(FileReader::GetNameByPath(path));
     // 设置页属性
     DWORD dwOldProtect = 0;
     VirtualProtect((char*)exeItem->GetImgBase(), exeItem->GetImageSize(),
